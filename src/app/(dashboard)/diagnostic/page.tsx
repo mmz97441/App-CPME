@@ -1,4 +1,19 @@
-import { DiagnosticForm } from "@/components/diagnostic/diagnostic-form";
+import dynamic from "next/dynamic";
+
+const DiagnosticForm = dynamic(
+  () =>
+    import("@/components/diagnostic/diagnostic-form").then(
+      (mod) => mod.DiagnosticForm
+    ),
+  {
+    loading: () => (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-muted-foreground">Chargement du questionnaire...</div>
+      </div>
+    ),
+    ssr: false,
+  }
+);
 
 export default function DiagnosticPage() {
   return (

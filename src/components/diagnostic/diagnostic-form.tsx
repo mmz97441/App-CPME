@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,46 +16,19 @@ import {
 import { Progress } from "@/components/ui/progress";
 
 const SECTORS = [
-  "Commerce",
-  "BTP",
-  "Industrie",
-  "Services",
-  "Artisanat",
-  "Agriculture",
-  "Numérique",
-  "Santé",
-  "Transport",
-  "Restauration",
-  "Autre",
+  "Commerce", "BTP", "Industrie", "Services", "Artisanat",
+  "Agriculture", "Numérique", "Santé", "Transport", "Restauration", "Autre",
 ];
 
 const REGIONS = [
-  "Auvergne-Rhône-Alpes",
-  "Bourgogne-Franche-Comté",
-  "Bretagne",
-  "Centre-Val de Loire",
-  "Corse",
-  "Grand Est",
-  "Hauts-de-France",
-  "Île-de-France",
-  "Normandie",
-  "Nouvelle-Aquitaine",
-  "Occitanie",
-  "Pays de la Loire",
-  "Provence-Alpes-Côte d'Azur",
-  "DOM-TOM",
+  "Auvergne-Rhône-Alpes", "Bourgogne-Franche-Comté", "Bretagne",
+  "Centre-Val de Loire", "Corse", "Grand Est", "Hauts-de-France",
+  "Île-de-France", "Normandie", "Nouvelle-Aquitaine", "Occitanie",
+  "Pays de la Loire", "Provence-Alpes-Côte d'Azur", "DOM-TOM",
 ];
 
 const STATUTS = [
-  "SARL",
-  "SAS",
-  "SASU",
-  "EURL",
-  "SA",
-  "EI",
-  "Micro-entreprise",
-  "SCI",
-  "Autre",
+  "SARL", "SAS", "SASU", "EURL", "SA", "EI", "Micro-entreprise", "SCI", "Autre",
 ];
 
 interface DiagnosticFormData {
@@ -82,6 +55,41 @@ const STEPS = [
   "Complexité administrative",
 ];
 
+/**
+ * Determine conditional field visibility based on current answers.
+ */
+function useConditionalFields(formData: DiagnosticFormData) {
+  return useMemo(() => {
+    const visible = {
+      // Fiscal - always show base fields
+      nombreDeclarations: true,
+      tempsMensuelFiscal: true,
+      // Conditional: show coûtConformité only for structured companies or high CA
+      coutConformite:
+        ["SA", "SAS", "SARL", "SASU", "EURL"].includes(formData.statutJuridique) ||
+        formData.caAnnuel > 100000,
+
+      // Social - conditional on effectif
+      nombreProceduresRH: formData.effectif > 5,
+      nombreInterlocuteurs: true,
+      scoreDifficultePercue: true,
+
+      // Admin - conditional
+      tempsAdminHebdo: true,
+      nombrePlateformes: true,
+      // Show double saisie only if multiple platforms
+      doubleSaisie: formData.nombrePlateformes > 1,
+    };
+
+    return visible;
+  }, [
+    formData.statutJuridique,
+    formData.caAnnuel,
+    formData.effectif,
+    formData.nombrePlateformes,
+  ]);
+}
+
 export function DiagnosticForm() {
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -104,6 +112,8 @@ export function DiagnosticForm() {
     doubleSaisie: false,
   });
 
+  const conditionalFields = useConditionalFields(formData);
+
   function updateField<K extends keyof DiagnosticFormData>(
     field: K,
     value: DiagnosticFormData[K]
@@ -115,11 +125,17 @@ export function DiagnosticForm() {
     setLoading(true);
     setError("");
 
+    // Apply defaults for hidden fields
+    const submitData = { ...formData };
+    if (!conditionalFields.coutConformite) submitData.coutConformite = 0;
+    if (!conditionalFields.nombreProceduresRH) submitData.nombreProceduresRH = 0;
+    if (!conditionalFields.doubleSaisie) submitData.doubleSaisie = false;
+
     try {
       const res = await fetch("/api/diagnostics", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(submitData),
       });
 
       const result = await res.json();
@@ -158,12 +174,14 @@ export function DiagnosticForm() {
         </div>
       )}
 
+      {/* Step 0: Profil entreprise */}
       {step === 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Profil de votre entreprise</CardTitle>
             <CardDescription>
-              Informations générales sur votre structure
+              Informations générales sur votre structure. Certaines questions
+              suivantes s&apos;adapteront selon vos réponses.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -177,6 +195,11 @@ export function DiagnosticForm() {
                   updateField("effectif", parseInt(e.target.value) || 1)
                 }
               />
+              {formData.effectif <= 5 && (
+                <p className="text-xs text-muted-foreground">
+                  Micro-entreprise : certaines questions RH seront simplifiées.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Secteur d&apos;activité</Label>
@@ -187,9 +210,7 @@ export function DiagnosticForm() {
               >
                 <option value="">Sélectionnez un secteur</option>
                 {SECTORS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
+                  <option key={s} value={s}>{s}</option>
                 ))}
               </select>
             </div>
@@ -209,17 +230,19 @@ export function DiagnosticForm() {
               <select
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={formData.statutJuridique}
-                onChange={(e) =>
-                  updateField("statutJuridique", e.target.value)
-                }
+                onChange={(e) => updateField("statutJuridique", e.target.value)}
               >
                 <option value="">Sélectionnez un statut</option>
                 {STATUTS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
+                  <option key={s} value={s}>{s}</option>
                 ))}
               </select>
+              {formData.statutJuridique === "Micro-entreprise" && (
+                <p className="text-xs text-muted-foreground">
+                  Régime simplifié : les questions sur les coûts de conformité
+                  seront adaptées.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Région</Label>
@@ -230,9 +253,7 @@ export function DiagnosticForm() {
               >
                 <option value="">Sélectionnez une région</option>
                 {REGIONS.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
+                  <option key={r} value={r}>{r}</option>
                 ))}
               </select>
             </div>
@@ -240,6 +261,7 @@ export function DiagnosticForm() {
         </Card>
       )}
 
+      {/* Step 1: Complexité fiscale - conditional fields */}
       {step === 1 && (
         <Card>
           <CardHeader>
@@ -256,10 +278,7 @@ export function DiagnosticForm() {
                 min={0}
                 value={formData.nombreDeclarations}
                 onChange={(e) =>
-                  updateField(
-                    "nombreDeclarations",
-                    parseInt(e.target.value) || 0
-                  )
+                  updateField("nombreDeclarations", parseInt(e.target.value) || 0)
                 }
               />
             </div>
@@ -270,34 +289,38 @@ export function DiagnosticForm() {
                 min={0}
                 value={formData.tempsMensuelFiscal}
                 onChange={(e) =>
-                  updateField(
-                    "tempsMensuelFiscal",
-                    parseFloat(e.target.value) || 0
-                  )
+                  updateField("tempsMensuelFiscal", parseFloat(e.target.value) || 0)
                 }
               />
             </div>
-            <div className="space-y-2">
-              <Label>
-                Coût annuel de conformité fiscale (EUR - expert-comptable,
-                logiciels, etc.)
-              </Label>
-              <Input
-                type="number"
-                min={0}
-                value={formData.coutConformite}
-                onChange={(e) =>
-                  updateField(
-                    "coutConformite",
-                    parseFloat(e.target.value) || 0
-                  )
-                }
-              />
-            </div>
+
+            {/* Conditional: coût conformité only for structured companies */}
+            {conditionalFields.coutConformite ? (
+              <div className="space-y-2">
+                <Label>
+                  Coût annuel de conformité fiscale (EUR - expert-comptable,
+                  logiciels, etc.)
+                </Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={formData.coutConformite}
+                  onChange={(e) =>
+                    updateField("coutConformite", parseFloat(e.target.value) || 0)
+                  }
+                />
+              </div>
+            ) : (
+              <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+                La question sur les coûts de conformité ne s&apos;applique pas
+                à votre statut/taille d&apos;entreprise.
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
 
+      {/* Step 2: Complexité sociale - conditional fields */}
       {step === 2 && (
         <Card>
           <CardHeader>
@@ -307,20 +330,26 @@ export function DiagnosticForm() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Nombre de procédures RH gérées par an</Label>
-              <Input
-                type="number"
-                min={0}
-                value={formData.nombreProceduresRH}
-                onChange={(e) =>
-                  updateField(
-                    "nombreProceduresRH",
-                    parseInt(e.target.value) || 0
-                  )
-                }
-              />
-            </div>
+            {/* Conditional: procédures RH only for effectif > 5 */}
+            {conditionalFields.nombreProceduresRH ? (
+              <div className="space-y-2">
+                <Label>Nombre de procédures RH gérées par an</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={formData.nombreProceduresRH}
+                  onChange={(e) =>
+                    updateField("nombreProceduresRH", parseInt(e.target.value) || 0)
+                  }
+                />
+              </div>
+            ) : (
+              <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+                Avec {formData.effectif} salarié(s), les procédures RH
+                complexes ne s&apos;appliquent pas.
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Nombre d&apos;interlocuteurs administratifs différents</Label>
               <Input
@@ -328,10 +357,7 @@ export function DiagnosticForm() {
                 min={0}
                 value={formData.nombreInterlocuteurs}
                 onChange={(e) =>
-                  updateField(
-                    "nombreInterlocuteurs",
-                    parseInt(e.target.value) || 0
-                  )
+                  updateField("nombreInterlocuteurs", parseInt(e.target.value) || 0)
                 }
               />
             </div>
@@ -357,6 +383,7 @@ export function DiagnosticForm() {
         </Card>
       )}
 
+      {/* Step 3: Complexité administrative - conditional fields */}
       {step === 3 && (
         <Card>
           <CardHeader>
@@ -373,10 +400,7 @@ export function DiagnosticForm() {
                 min={0}
                 value={formData.tempsAdminHebdo}
                 onChange={(e) =>
-                  updateField(
-                    "tempsAdminHebdo",
-                    parseFloat(e.target.value) || 0
-                  )
+                  updateField("tempsAdminHebdo", parseFloat(e.target.value) || 0)
                 }
               />
             </div>
@@ -387,27 +411,30 @@ export function DiagnosticForm() {
                 min={0}
                 value={formData.nombrePlateformes}
                 onChange={(e) =>
-                  updateField(
-                    "nombrePlateformes",
-                    parseInt(e.target.value) || 0
-                  )
+                  updateField("nombrePlateformes", parseInt(e.target.value) || 0)
                 }
               />
             </div>
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="doubleSaisie"
-                checked={formData.doubleSaisie}
-                onChange={(e) =>
-                  updateField("doubleSaisie", e.target.checked)
-                }
-                className="h-4 w-4 rounded border-gray-300"
-              />
-              <Label htmlFor="doubleSaisie">
-                Effectuez-vous des doubles saisies de données ?
-              </Label>
-            </div>
+
+            {/* Conditional: double saisie only if multiple platforms */}
+            {conditionalFields.doubleSaisie ? (
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="doubleSaisie"
+                  checked={formData.doubleSaisie}
+                  onChange={(e) => updateField("doubleSaisie", e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <Label htmlFor="doubleSaisie">
+                  Effectuez-vous des doubles saisies de données entre plateformes ?
+                </Label>
+              </div>
+            ) : (
+              <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+                Avec une seule plateforme, la double saisie ne s&apos;applique pas.
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

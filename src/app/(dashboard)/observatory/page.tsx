@@ -1,4 +1,19 @@
-import { ObservatoryDashboard } from "@/components/observatory/observatory-dashboard";
+import dynamic from "next/dynamic";
+
+const ObservatoryDashboard = dynamic(
+  () =>
+    import("@/components/observatory/observatory-dashboard").then(
+      (mod) => mod.ObservatoryDashboard
+    ),
+  {
+    loading: () => (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-muted-foreground">Chargement du tableau de bord...</div>
+      </div>
+    ),
+    ssr: false,
+  }
+);
 
 export default function ObservatoryPage() {
   return (

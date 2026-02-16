@@ -1,4 +1,19 @@
-import { EntrepreneurDashboard } from "@/components/dashboard/entrepreneur-dashboard";
+import dynamic from "next/dynamic";
+
+const EntrepreneurDashboard = dynamic(
+  () =>
+    import("@/components/dashboard/entrepreneur-dashboard").then(
+      (mod) => mod.EntrepreneurDashboard
+    ),
+  {
+    loading: () => (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-muted-foreground">Chargement...</div>
+      </div>
+    ),
+    ssr: false,
+  }
+);
 
 export default function DashboardPage() {
   return (
