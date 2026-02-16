@@ -1,9 +1,12 @@
 version: "3.8"
 
 services:
+  # PostgreSQL local pour le développement sans Supabase
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    profiles:
+      - local
     environment:
       POSTGRES_USER: observatoire
       POSTGRES_PASSWORD: observatoire_pwd
@@ -18,21 +21,46 @@ services:
       timeout: 5s
       retries: 5
 
-  app:
+  # Application Next.js avec PostgreSQL local
+  app-local:
     build:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    profiles:
+      - local
     ports:
       - "3000:3000"
     environment:
       DATABASE_URL: "postgresql://observatoire:observatoire_pwd@db:5432/observatoire_pme?schema=public"
+      DIRECT_URL: "postgresql://observatoire:observatoire_pwd@db:5432/observatoire_pme?schema=public"
       NEXTAUTH_URL: "http://localhost:3000"
       NEXTAUTH_SECRET: "change-this-secret-in-production"
       OPENAI_API_KEY: "${OPENAI_API_KEY}"
     depends_on:
       db:
         condition: service_healthy
+
+  # Application Next.js avec Supabase (production/staging)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    profiles:
+      - supabase
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "${DATABASE_URL}"
+      DIRECT_URL: "${DIRECT_URL}"
+      NEXT_PUBLIC_SUPABASE_URL: "${NEXT_PUBLIC_SUPABASE_URL}"
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "${NEXT_PUBLIC_SUPABASE_ANON_KEY}"
+      SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY}"
+      NEXTAUTH_URL: "${NEXTAUTH_URL}"
+      NEXTAUTH_SECRET: "${NEXTAUTH_SECRET}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
+      NODE_ENV: "production"
 
 volumes:
   postgres_data:
