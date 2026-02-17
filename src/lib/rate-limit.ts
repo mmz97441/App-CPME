@@ -37,9 +37,9 @@ export function rateLimit(options: RateLimitOptions) {
 // Cleanup old entries periodically
 setInterval(() => {
   const now = Date.now();
-  for (const [key, bucket] of tokenBuckets.entries()) {
+  tokenBuckets.forEach((bucket, key) => {
     if (now - bucket.lastReset > 60 * 60 * 1000) {
       tokenBuckets.delete(key);
     }
-  }
+  });
 }, 60 * 60 * 1000);
