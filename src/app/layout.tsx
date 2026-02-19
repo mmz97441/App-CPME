@@ -1,14 +1,11 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 
-const inter = Inter({ subsets: ["latin"] });
-
 export const metadata: Metadata = {
-  title: "Observatoire de la Simplification & Performance PME",
+  title: "CPME-OS | Système de Gestion CPME",
   description:
-    "Plateforme d'analyse de la complexité administrative et de son impact sur la performance des PME françaises.",
+    "Plateforme de gestion des adhérents, cotisations, mandats et gouvernance de la CPME.",
 };
 
 export default function RootLayout({
@@ -18,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr">
-      <body className={inter.className}>
+      <body className="font-sans antialiased">
         <Providers>{children}</Providers>
       </body>
     </html>
