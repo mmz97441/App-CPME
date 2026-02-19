@@ -19,6 +19,13 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    if (!canManageMandats(session.user.role)) {
+      return NextResponse.json(
+        { error: "Permissions insuffisantes" },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search");
     const classification = searchParams.get("classification");

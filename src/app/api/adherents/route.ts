@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canManageAdherents } from "@/types/rbac";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 // =============================================================================
 // GET /api/adherents - List all adherents with filters
@@ -18,6 +19,34 @@ export async function GET(req: NextRequest) {
         { error: "Non autoris\u00e9" },
         { status: 401 }
       );
+    }
+
+    // ADHERENT can only see their own record
+    if (session.user.role === "ADHERENT") {
+      const myAdherent = await prisma.adherent.findFirst({
+        where: { userId: session.user.id },
+        include: {
+          user: {
+            select: { id: true, email: true, name: true, role: true, isActive: true },
+          },
+          cotisations: {
+            where: { year: new Date().getFullYear() },
+            orderBy: { year: "desc" },
+            take: 1,
+          },
+        },
+      });
+      if (!myAdherent) {
+        return NextResponse.json({ success: true, data: [] });
+      }
+      return NextResponse.json({
+        success: true,
+        data: [{
+          ...myAdherent,
+          latestCotisation: myAdherent.cotisations[0] ?? null,
+          cotisations: undefined,
+        }],
+      });
     }
 
     const { searchParams } = new URL(req.url);
@@ -170,8 +199,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Generate temporary password: companyName + "2026!"
-    const tempPassword = data.companyName + "2026!";
+    // Generate secure temporary password
+    const tempPassword = crypto.randomBytes(12).toString("base64url");
     const passwordHash = await bcrypt.hash(tempPassword, 12);
 
     // Create user and adherent in a transaction
@@ -217,7 +246,10 @@ export async function POST(req: NextRequest) {
       return adherent;
     });
 
-    return NextResponse.json({ success: true, data: result }, { status: 201 });
+    return NextResponse.json(
+      { success: true, data: result, tempPassword },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Error creating adherent:", error);
     return NextResponse.json(

@@ -206,6 +206,17 @@ export async function PUT(
 }
 
 // =============================================================================
+// PATCH /api/adherents/[id] - Update adherent (alias for PUT)
+// =============================================================================
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  return PUT(req, { params });
+}
+
+// =============================================================================
 // DELETE /api/adherents/[id] - Soft delete adherent
 // =============================================================================
 

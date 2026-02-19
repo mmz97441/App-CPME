@@ -63,6 +63,17 @@ export default function MandatsPage() {
   const [search, setSearch] = useState("");
   const [classificationFilter, setClassificationFilter] = useState("");
 
+  // New mandat form
+  const [showForm, setShowForm] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newMandat, setNewMandat] = useState({
+    name: "",
+    organisme: "",
+    classification: "STRATEGIQUE" as "STRATEGIQUE" | "TECHNIQUE",
+    description: "",
+    feuilleDeRoute: "",
+  });
+
   const userRole = session?.user?.role as Role | undefined;
 
   useEffect(() => {
@@ -87,6 +98,35 @@ export default function MandatsPage() {
     fetchMandats();
   }, [classificationFilter]);
 
+  async function handleCreateMandat() {
+    if (!newMandat.name.trim() || !newMandat.organisme.trim()) return;
+    setCreating(true);
+    setError("");
+    try {
+      const res = await fetch("/api/mandats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newMandat),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Erreur lors de la création");
+      }
+      setNewMandat({ name: "", organisme: "", classification: "STRATEGIQUE", description: "", feuilleDeRoute: "" });
+      setShowForm(false);
+      // Re-fetch
+      const fetchRes = await fetch(`/api/mandats${classificationFilter ? `?classification=${classificationFilter}` : ""}`);
+      if (fetchRes.ok) {
+        const fetchData = await fetchRes.json();
+        setMandats(fetchData.data ?? []);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur inconnue");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   const filtered = mandats.filter((m) => {
     if (search === "") return true;
     const term = search.toLowerCase();
@@ -109,14 +149,6 @@ export default function MandatsPage() {
     );
   }
 
-  if (error) {
-    return (
-      <div className="rounded-md bg-destructive/10 p-4 text-sm text-destructive">
-        {error}
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -130,12 +162,91 @@ export default function MandatsPage() {
           </Badge>
         </div>
         {userRole && canManageMandats(userRole) && (
-          <Button>
+          <Button onClick={() => setShowForm(!showForm)}>
             <Plus className="mr-2 h-4 w-4" />
             Nouveau mandat
           </Button>
         )}
       </div>
+
+      {/* New mandat form */}
+      {showForm && (
+        <Card className="border-primary">
+          <CardHeader>
+            <CardTitle className="text-base">Créer un nouveau mandat</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Nom du mandat *</label>
+                <Input
+                  value={newMandat.name}
+                  onChange={(e) => setNewMandat({ ...newMandat, name: e.target.value })}
+                  placeholder="Ex: Représentant CGSS"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Organisme *</label>
+                <Input
+                  value={newMandat.organisme}
+                  onChange={(e) => setNewMandat({ ...newMandat, organisme: e.target.value })}
+                  placeholder="Ex: CGSS Réunion"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Classification</label>
+                <select
+                  value={newMandat.classification}
+                  onChange={(e) => setNewMandat({ ...newMandat, classification: e.target.value as "STRATEGIQUE" | "TECHNIQUE" })}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <option value="STRATEGIQUE">Stratégique</option>
+                  <option value="TECHNIQUE">Technique</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Description</label>
+                <Input
+                  value={newMandat.description}
+                  onChange={(e) => setNewMandat({ ...newMandat, description: e.target.value })}
+                  placeholder="Description du mandat..."
+                />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Feuille de route</label>
+              <textarea
+                value={newMandat.feuilleDeRoute}
+                onChange={(e) => setNewMandat({ ...newMandat, feuilleDeRoute: e.target.value })}
+                placeholder="Points clés que le mandataire doit défendre..."
+                rows={3}
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button onClick={handleCreateMandat} disabled={creating || !newMandat.name.trim() || !newMandat.organisme.trim()}>
+                {creating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Création...
+                  </>
+                ) : (
+                  "Créer le mandat"
+                )}
+              </Button>
+              <Button variant="outline" onClick={() => setShowForm(false)} disabled={creating}>
+                Annuler
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {error && (
+        <div className="rounded-md bg-destructive/10 p-4 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
       {/* Filter bar */}
       <Card>

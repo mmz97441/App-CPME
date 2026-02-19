@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 
 // =============================================================================
@@ -46,25 +47,13 @@ export async function GET(req: NextRequest) {
       where,
       include: {
         createdBy: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
+          select: { id: true, name: true, email: true },
         },
         assignedTo: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
+          select: { id: true, name: true, email: true },
         },
         adherent: {
-          select: {
-            id: true,
-            companyName: true,
-            siret: true,
-          },
+          select: { id: true, companyName: true, siret: true },
         },
       },
       orderBy: [
@@ -84,8 +73,20 @@ export async function GET(req: NextRequest) {
 }
 
 // =============================================================================
-// POST /api/tickets - Create a new ticket
+// POST /api/tickets - Create a new ticket (Zod validated)
 // =============================================================================
+
+const createTicketSchema = z.object({
+  category: z.enum(["JURIDIQUE", "PRESSE", "COTISATION", "AUTRE"], {
+    errorMap: () => ({ message: "Catégorie invalide" }),
+  }),
+  subject: z
+    .string()
+    .min(1, "Le sujet est requis")
+    .max(500, "Le sujet ne doit pas dépasser 500 caractères"),
+  adherentId: z.string().optional().nullable(),
+  priority: z.number().int().min(0).max(3).default(0),
+});
 
 export async function POST(req: NextRequest) {
   try {
@@ -98,52 +99,47 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { category, subject, adherentId, priority } = body;
+    const parsed = createTicketSchema.safeParse(body);
 
-    if (!category || !subject) {
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "La catégorie et le sujet sont requis" },
+        { error: parsed.error.errors.map((e) => e.message).join(", ") },
         { status: 400 }
       );
     }
 
-    const validCategories = ["JURIDIQUE", "PRESSE", "COTISATION", "AUTRE"];
-    if (!validCategories.includes(category)) {
-      return NextResponse.json(
-        { error: "Catégorie invalide" },
-        { status: 400 }
-      );
+    const data = parsed.data;
+
+    // Validate adherentId exists if provided
+    if (data.adherentId) {
+      const adherent = await prisma.adherent.findUnique({
+        where: { id: data.adherentId },
+      });
+      if (!adherent) {
+        return NextResponse.json(
+          { error: "Adhérent non trouvé" },
+          { status: 400 }
+        );
+      }
     }
 
     const ticket = await prisma.ticket.create({
       data: {
-        category,
-        subject,
-        adherentId: adherentId || null,
-        priority: typeof priority === "number" ? priority : 0,
+        category: data.category,
+        subject: data.subject.trim(),
+        adherentId: data.adherentId || null,
+        priority: data.priority,
         createdById: session.user.id,
       },
       include: {
         createdBy: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
+          select: { id: true, name: true, email: true },
         },
         assignedTo: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
+          select: { id: true, name: true, email: true },
         },
         adherent: {
-          select: {
-            id: true,
-            companyName: true,
-            siret: true,
-          },
+          select: { id: true, companyName: true, siret: true },
         },
       },
     });

@@ -22,6 +22,13 @@ export async function GET(
       );
     }
 
+    if (!canManageMandats(session.user.role)) {
+      return NextResponse.json(
+        { error: "Permissions insuffisantes" },
+        { status: 403 }
+      );
+    }
+
     const mandat = await prisma.mandat.findUnique({
       where: { id: params.id },
       include: {

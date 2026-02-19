@@ -14,9 +14,7 @@ const updateCotisationSchema = z.object({
   amount: z.number().positive().optional(),
   dueDate: z
     .string()
-    .refine((val) => !isNaN(Date.parse(val)), {
-      message: "Date invalide",
-    })
+    .refine((val) => !isNaN(Date.parse(val)), { message: "Date invalide" })
     .optional(),
   notes: z.string().optional().nullable(),
   invoiceRef: z.string().optional().nullable(),
@@ -26,31 +24,22 @@ const updateCotisationSchema = z.object({
 const VALID_TRANSITIONS: Record<string, string[]> = {
   PENDING: ["PAID", "OVERDUE", "SUSPENDED"],
   OVERDUE: ["PAID", "SUSPENDED"],
-  PAID: [], // Cannot change from PAID (immutable once paid)
+  PAID: [], // Immutable once paid
   SUSPENDED: ["PAID", "PENDING"], // Requires canLiftSuspension
 };
 
 // =============================================================================
-// Helper: update cotisation with proper logic
+// Helper: update cotisation inside a transaction
 // =============================================================================
 
-async function handleUpdate(
-  req: NextRequest,
-  params: { id: string }
-) {
+async function handleUpdate(req: NextRequest, params: { id: string }) {
   const session = await getServerSession(authOptions);
   if (!session) {
-    return NextResponse.json(
-      { error: "Non autorisé" },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
 
   if (!canManageCotisations(session.user.role)) {
-    return NextResponse.json(
-      { error: "Permissions insuffisantes" },
-      { status: 403 }
-    );
+    return NextResponse.json({ error: "Permissions insuffisantes" }, { status: 403 });
   }
 
   const body = await req.json();
@@ -65,109 +54,139 @@ async function handleUpdate(
 
   const data = parsed.data;
 
-  const existing = await prisma.cotisation.findUnique({
-    where: { id: params.id },
-    include: { adherent: true },
-  });
-
-  if (!existing) {
-    return NextResponse.json(
-      { error: "Cotisation non trouvée" },
-      { status: 404 }
-    );
-  }
-
-  const updateData: Record<string, unknown> = {};
-
-  if (data.amount !== undefined) updateData.amount = data.amount;
-  if (data.dueDate !== undefined) updateData.dueDate = new Date(data.dueDate);
-  if (data.notes !== undefined) updateData.notes = data.notes;
-  if (data.invoiceRef !== undefined) updateData.invoiceRef = data.invoiceRef;
-
+  // Pre-validate before transaction
   if (data.status !== undefined) {
+    const existing = await prisma.cotisation.findUnique({
+      where: { id: params.id },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Cotisation non trouvée" }, { status: 404 });
+    }
+
     const oldStatus = existing.status;
     const newStatus = data.status;
 
-    // Validate transition
-    const allowed = VALID_TRANSITIONS[oldStatus] ?? [];
-    if (oldStatus !== newStatus && !allowed.includes(newStatus)) {
-      return NextResponse.json(
-        {
-          error: `Transition de statut invalide: ${oldStatus} → ${newStatus}`,
-        },
-        { status: 400 }
-      );
-    }
-
-    // Lifting suspension requires PRESIDENT/ADMIN
-    if (oldStatus === "SUSPENDED" && newStatus !== "SUSPENDED") {
-      if (!canLiftSuspension(session.user.role)) {
+    if (oldStatus !== newStatus) {
+      const allowed = VALID_TRANSITIONS[oldStatus] ?? [];
+      if (!allowed.includes(newStatus)) {
         return NextResponse.json(
-          {
-            error:
-              "Seul le Président ou l'Administrateur peut lever une suspension",
-          },
-          { status: 403 }
+          { error: `Transition de statut invalide: ${oldStatus} → ${newStatus}` },
+          { status: 400 }
         );
       }
     }
 
-    updateData.status = newStatus;
-
-    // When PAID, set paidAt
-    if (newStatus === "PAID") {
-      updateData.paidAt = new Date();
-    }
-
-    // When SUSPENDED, deactivate adherent
-    if (newStatus === "SUSPENDED" && oldStatus !== "SUSPENDED") {
-      await prisma.adherent.update({
-        where: { id: existing.adherentId },
-        data: { isActive: false },
-      });
-    }
-
-    // When lifting suspension to PAID, reactivate ONLY if no other
-    // active suspension exists and the user was deactivated by suspension
-    if (oldStatus === "SUSPENDED" && newStatus === "PAID") {
-      const otherSuspensions = await prisma.cotisation.count({
-        where: {
-          adherentId: existing.adherentId,
-          status: "SUSPENDED",
-          id: { not: existing.id },
-        },
-      });
-      if (otherSuspensions === 0) {
-        await prisma.adherent.update({
-          where: { id: existing.adherentId },
-          data: { isActive: true },
-        });
+    if (oldStatus === "SUSPENDED" && newStatus !== "SUSPENDED") {
+      if (!canLiftSuspension(session.user.role)) {
+        return NextResponse.json(
+          { error: "Seul le Président ou l'Administrateur peut lever une suspension" },
+          { status: 403 }
+        );
       }
     }
   }
 
-  const cotisation = await prisma.cotisation.update({
-    where: { id: params.id },
-    data: updateData,
-    include: {
-      adherent: {
-        select: {
-          id: true,
-          companyName: true,
-          isActive: true,
-          user: {
-            select: { email: true, name: true },
+  // Run in transaction to prevent race conditions
+  try {
+    const cotisation = await prisma.$transaction(async (tx) => {
+      const existing = await tx.cotisation.findUnique({
+        where: { id: params.id },
+        include: { adherent: true },
+      });
+
+      if (!existing) {
+        throw new Error("NOT_FOUND");
+      }
+
+      const updateData: Record<string, unknown> = {};
+
+      if (data.amount !== undefined) updateData.amount = data.amount;
+      if (data.dueDate !== undefined) updateData.dueDate = new Date(data.dueDate);
+      if (data.notes !== undefined) updateData.notes = data.notes;
+      if (data.invoiceRef !== undefined) updateData.invoiceRef = data.invoiceRef;
+
+      if (data.status !== undefined) {
+        const oldStatus = existing.status;
+        const newStatus = data.status;
+
+        // Re-validate inside transaction
+        if (oldStatus !== newStatus) {
+          const allowed = VALID_TRANSITIONS[oldStatus] ?? [];
+          if (!allowed.includes(newStatus)) {
+            throw new Error("INVALID_TRANSITION");
+          }
+        }
+
+        updateData.status = newStatus;
+
+        if (newStatus === "PAID") {
+          updateData.paidAt = new Date();
+        }
+
+        // SUSPENDED → deactivate adherent
+        if (newStatus === "SUSPENDED" && oldStatus !== "SUSPENDED") {
+          await tx.adherent.update({
+            where: { id: existing.adherentId },
+            data: { isActive: false },
+          });
+        }
+
+        // Lifting suspension → reactivate only if no other current year suspensions
+        if (oldStatus === "SUSPENDED" && newStatus === "PAID") {
+          const currentYear = new Date().getFullYear();
+          const otherSuspensions = await tx.cotisation.count({
+            where: {
+              adherentId: existing.adherentId,
+              status: "SUSPENDED",
+              year: currentYear,
+              id: { not: existing.id },
+            },
+          });
+          if (otherSuspensions === 0) {
+            await tx.adherent.update({
+              where: { id: existing.adherentId },
+              data: { isActive: true },
+            });
+          }
+        }
+      }
+
+      return tx.cotisation.update({
+        where: { id: params.id },
+        data: updateData,
+        include: {
+          adherent: {
+            select: {
+              id: true,
+              companyName: true,
+              isActive: true,
+              user: { select: { email: true, name: true } },
+            },
           },
         },
-      },
-    },
-  });
+      });
+    });
 
-  return NextResponse.json({ success: true, data: cotisation });
+    return NextResponse.json({ success: true, data: cotisation });
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === "NOT_FOUND") {
+        return NextResponse.json({ error: "Cotisation non trouvée" }, { status: 404 });
+      }
+      if (error.message === "INVALID_TRANSITION") {
+        return NextResponse.json(
+          { error: "Transition de statut invalide (conflit concurrent)" },
+          { status: 409 }
+        );
+      }
+    }
+    throw error;
+  }
 }
 
 // =============================================================================
-// PUT /api/cotisations/[id] - Update cotisation
+// PUT /api/cotisations/[id]
 // =============================================================================
 
 export async function PUT(
@@ -178,15 +197,12 @@ export async function PUT(
     return await handleUpdate(req, params);
   } catch (error) {
     console.error("Error updating cotisation:", error);
-    return NextResponse.json(
-      { error: "Erreur interne du serveur" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Erreur interne du serveur" }, { status: 500 });
   }
 }
 
 // =============================================================================
-// PATCH /api/cotisations/[id] - Update cotisation (alias for PUT)
+// PATCH /api/cotisations/[id] (alias)
 // =============================================================================
 
 export async function PATCH(
@@ -197,15 +213,12 @@ export async function PATCH(
     return await handleUpdate(req, params);
   } catch (error) {
     console.error("Error updating cotisation:", error);
-    return NextResponse.json(
-      { error: "Erreur interne du serveur" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Erreur interne du serveur" }, { status: 500 });
   }
 }
 
 // =============================================================================
-// DELETE /api/cotisations/[id] - Delete cotisation (ADMIN only)
+// DELETE /api/cotisations/[id] (ADMIN only)
 // =============================================================================
 
 export async function DELETE(
@@ -215,15 +228,12 @@ export async function DELETE(
   try {
     const session = await getServerSession(authOptions);
     if (!session) {
-      return NextResponse.json(
-        { error: "Non autorisé" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
     if (!canManageUsers(session.user.role)) {
       return NextResponse.json(
-        { error: "Permissions insuffisantes. Seul un administrateur peut supprimer une cotisation." },
+        { error: "Seul un administrateur peut supprimer une cotisation" },
         { status: 403 }
       );
     }
@@ -233,25 +243,14 @@ export async function DELETE(
     });
 
     if (!existing) {
-      return NextResponse.json(
-        { error: "Cotisation non trouvée" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Cotisation non trouvée" }, { status: 404 });
     }
 
-    await prisma.cotisation.delete({
-      where: { id: params.id },
-    });
+    await prisma.cotisation.delete({ where: { id: params.id } });
 
-    return NextResponse.json({
-      success: true,
-      message: "Cotisation supprimée avec succès",
-    });
+    return NextResponse.json({ success: true, message: "Cotisation supprimée" });
   } catch (error) {
     console.error("Error deleting cotisation:", error);
-    return NextResponse.json(
-      { error: "Erreur interne du serveur" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Erreur interne du serveur" }, { status: 500 });
   }
 }
