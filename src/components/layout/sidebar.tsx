@@ -19,33 +19,8 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { hasMinRole, ROLE_LABELS } from "@/types/rbac";
 import type { Role } from "@prisma/client";
-
-const ROLE_HIERARCHY: Role[] = [
-  "ADMIN",
-  "PRESIDENT",
-  "DELEGUE_GENERAL",
-  "TRESORIER",
-  "MEMBRE_BUREAU",
-  "MEMBRE_CA",
-  "ADHERENT",
-];
-
-function hasMinRole(userRole: Role, minRole: Role): boolean {
-  const userIndex = ROLE_HIERARCHY.indexOf(userRole);
-  const minIndex = ROLE_HIERARCHY.indexOf(minRole);
-  return userIndex !== -1 && userIndex <= minIndex;
-}
-
-const ROLE_LABELS: Record<Role, string> = {
-  ADMIN: "Administrateur",
-  PRESIDENT: "Président",
-  DELEGUE_GENERAL: "Délégué Général",
-  TRESORIER: "Trésorier",
-  MEMBRE_BUREAU: "Membre du Bureau",
-  MEMBRE_CA: "Membre du CA",
-  ADHERENT: "Adhérent",
-};
 
 interface NavItem {
   label: string;
@@ -75,6 +50,7 @@ const navItems: NavItem[] = [
     label: "Liste Électorale",
     href: "/electoral",
     icon: Vote,
+    minRole: "DELEGUE_GENERAL",
   },
   {
     label: "Gouvernance",

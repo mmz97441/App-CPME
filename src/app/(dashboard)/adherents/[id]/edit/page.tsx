@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import {
@@ -21,6 +22,8 @@ import {
   getCotisationLabel,
   formatEuros,
 } from "@/utils/cotisation";
+import { canManageAdherents } from "@/types/rbac";
+import type { Role } from "@prisma/client";
 import type { AdherentFull } from "@/types";
 
 const SECTEUR_OPTIONS = [
@@ -39,7 +42,10 @@ const TYPE_OPTIONS = [
 export default function EditAdherentPage() {
   const params = useParams();
   const router = useRouter();
+  const { data: session, status: sessionStatus } = useSession();
   const id = params.id as string;
+
+  const userRole = session?.user?.role as Role | undefined;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -171,10 +177,26 @@ export default function EditAdherentPage() {
   const cotisationAmount = getCotisationAmount(Number(form.effectif) || 0);
   const cotisationLabel = getCotisationLabel(Number(form.effectif) || 0);
 
-  if (loading) {
+  if (loading || sessionStatus === "loading") {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!userRole || !canManageAdherents(userRole)) {
+    return (
+      <div className="space-y-4">
+        <Link href="/adherents">
+          <Button variant="ghost" size="sm">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Retour
+          </Button>
+        </Link>
+        <div className="rounded-md bg-destructive/10 p-4 text-sm text-destructive">
+          Vous n&apos;avez pas les permissions pour modifier un adhérent.
+        </div>
       </div>
     );
   }
@@ -317,7 +339,7 @@ export default function EditAdherentPage() {
                 type="number"
                 min={0}
                 value={form.effectif}
-                onChange={(e) => updateField("effectif", e.target.value)}
+                onChange={(e) => updateField("effectif", parseInt(e.target.value) || 0)}
               />
               {fieldErrors.effectif && (
                 <p className="text-xs text-destructive">

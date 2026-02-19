@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -32,6 +33,8 @@ import {
   getCotisationLabel,
   getCotisationAmount,
 } from "@/utils/cotisation";
+import { canManageAdherents } from "@/types/rbac";
+import type { Role } from "@prisma/client";
 
 const SECTEUR_LABELS: Record<string, string> = {
   COMMERCE: "Commerce",
@@ -58,6 +61,8 @@ const COTISATION_STATUS_CONFIG: Record<
 
 export default function AdherentDetailPage() {
   const params = useParams();
+  const { data: session } = useSession();
+  const userRole = session?.user?.role as Role | undefined;
   const id = params.id as string;
 
   const [adherent, setAdherent] = useState<AdherentFull | null>(null);
@@ -148,12 +153,14 @@ export default function AdherentDetailPage() {
             </p>
           </div>
         </div>
-        <Link href={`/adherents/${id}/edit`}>
-          <Button variant="outline">
-            <Pencil className="mr-2 h-4 w-4" />
-            Modifier
-          </Button>
-        </Link>
+        {userRole && canManageAdherents(userRole) && (
+          <Link href={`/adherents/${id}/edit`}>
+            <Button variant="outline">
+              <Pencil className="mr-2 h-4 w-4" />
+              Modifier
+            </Button>
+          </Link>
+        )}
       </div>
 
       {/* Info grid */}

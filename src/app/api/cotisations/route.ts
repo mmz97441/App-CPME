@@ -26,6 +26,18 @@ export async function GET(req: NextRequest) {
 
     const where: Record<string, unknown> = {};
 
+    // RBAC: ADHERENT can only see their own cotisations
+    if (session.user.role === "ADHERENT") {
+      const myAdherent = await prisma.adherent.findFirst({
+        where: { userId: session.user.id },
+        select: { id: true },
+      });
+      if (!myAdherent) {
+        return NextResponse.json({ success: true, data: [] });
+      }
+      where.adherentId = myAdherent.id;
+    }
+
     if (year) {
       where.year = parseInt(year, 10);
     }

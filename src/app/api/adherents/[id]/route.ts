@@ -22,6 +22,20 @@ export async function GET(
       );
     }
 
+    // RBAC: ADHERENT can only view their own record
+    if (session.user.role === "ADHERENT") {
+      const myAdherent = await prisma.adherent.findFirst({
+        where: { userId: session.user.id },
+        select: { id: true },
+      });
+      if (!myAdherent || myAdherent.id !== params.id) {
+        return NextResponse.json(
+          { error: "Permissions insuffisantes" },
+          { status: 403 }
+        );
+      }
+    }
+
     const adherent = await prisma.adherent.findUnique({
       where: { id: params.id },
       include: {

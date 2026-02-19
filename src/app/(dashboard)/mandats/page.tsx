@@ -78,6 +78,8 @@ export default function MandatsPage() {
 
   useEffect(() => {
     async function fetchMandats() {
+      setLoading(true);
+      setError("");
       try {
         const params = new URLSearchParams();
         if (classificationFilter) {

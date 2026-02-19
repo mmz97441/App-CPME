@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import {
   Vote,
   CheckCircle2,
@@ -20,6 +21,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { ElectoralEntry } from "@/types";
 import { formatDate } from "@/utils/cotisation";
+import { canViewElectoralList } from "@/types/rbac";
+import type { Role } from "@prisma/client";
 
 type FilterMode = "all" | "eligible" | "ineligible";
 
@@ -39,6 +42,8 @@ const SECTEUR_LABELS: Record<string, string> = {
 };
 
 export default function ElectoralPage() {
+  const { data: session, status: sessionStatus } = useSession();
+  const userRole = session?.user?.role as Role | undefined;
   const [entries, setEntries] = useState<ElectoralEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -168,10 +173,18 @@ export default function ElectoralPage() {
         ? ineligible
         : entries;
 
-  if (loading) {
+  if (loading || sessionStatus === "loading") {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!userRole || !canViewElectoralList(userRole)) {
+    return (
+      <div className="rounded-md bg-destructive/10 p-4 text-sm text-destructive">
+        Vous n&apos;avez pas les permissions pour consulter la liste électorale.
       </div>
     );
   }

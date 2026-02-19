@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Loader2,
   Plus,
@@ -136,6 +136,14 @@ export default function TicketsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Debounce search input (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   // New ticket form
   const [showForm, setShowForm] = useState(false);
@@ -146,24 +154,34 @@ export default function TicketsPage() {
   // ----------- Fetch tickets ------------------------------------------------
 
   const fetchTickets = useCallback(async () => {
+    // Abort previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams();
       if (statusFilter) params.set("status", statusFilter);
       if (categoryFilter) params.set("category", categoryFilter);
-      if (search) params.set("search", search);
+      if (debouncedSearch) params.set("search", debouncedSearch);
 
-      const res = await fetch(`/api/tickets?${params.toString()}`);
+      const res = await fetch(`/api/tickets?${params.toString()}`, {
+        signal: controller.signal,
+      });
       if (!res.ok) throw new Error("Erreur lors du chargement des tickets");
       const json = await res.json();
       setTickets(json.data ?? []);
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Erreur inconnue");
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, categoryFilter, search]);
+  }, [statusFilter, categoryFilter, debouncedSearch]);
 
   useEffect(() => {
     fetchTickets();

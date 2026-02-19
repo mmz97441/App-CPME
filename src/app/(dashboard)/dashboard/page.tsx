@@ -57,33 +57,39 @@ export default function DashboardPage() {
     );
   }
 
-  if (!stats) return null;
+  if (!stats) {
+    return (
+      <div className="rounded-md bg-destructive/10 p-4 text-sm text-destructive">
+        Impossible de charger les statistiques.
+      </div>
+    );
+  }
 
   const mainCards = [
     {
       title: "Total Adhérents",
-      value: stats.totalAdherents,
+      value: stats.totalAdherents ?? 0,
       icon: Users,
       color: "text-blue-600",
       bg: "bg-blue-50",
     },
     {
       title: "Adhérents Actifs",
-      value: stats.adherentsActifs,
+      value: stats.adherentsActifs ?? 0,
       icon: UserCheck,
       color: "text-green-600",
       bg: "bg-green-50",
     },
     {
       title: "Cotisations Payées",
-      value: stats.cotisationsPayees,
+      value: stats.cotisationsPayees ?? 0,
       icon: CreditCard,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
     },
     {
       title: "Taux de Recouvrement",
-      value: `${stats.tauxRecouvrement.toFixed(1)}%`,
+      value: `${(stats.tauxRecouvrement ?? 0).toFixed(1)}%`,
       icon: TrendingUp,
       color: "text-purple-600",
       bg: "bg-purple-50",
@@ -93,21 +99,21 @@ export default function DashboardPage() {
   const secondaryCards = [
     {
       title: "Recettes totales",
-      value: formatEuros(stats.totalRecettes),
+      value: formatEuros(stats.totalRecettes ?? 0),
       icon: Wallet,
       color: "text-amber-600",
       bg: "bg-amber-50",
     },
     {
       title: "Mandats actifs",
-      value: stats.mandatsActifs,
+      value: stats.mandatsActifs ?? 0,
       icon: Briefcase,
       color: "text-indigo-600",
       bg: "bg-indigo-50",
     },
     {
       title: "Tickets ouverts",
-      value: stats.ticketsOuverts,
+      value: stats.ticketsOuverts ?? 0,
       icon: MessageSquare,
       color: "text-rose-600",
       bg: "bg-rose-50",
@@ -176,7 +182,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-amber-600">
-              {stats.cotisationsEnAttente}
+              {stats.cotisationsEnAttente ?? 0}
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               appels de cotisation en attente de paiement
@@ -189,7 +195,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-red-600">
-              {stats.cotisationsEnRetard}
+              {stats.cotisationsEnRetard ?? 0}
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               cotisations dont la date d&apos;échéance est dépassée
