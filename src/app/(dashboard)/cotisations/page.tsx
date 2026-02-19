@@ -64,6 +64,11 @@ export default function CotisationsPage() {
   const [generating, setGenerating] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+  const [relancing, setRelancing] = useState(false);
+  const [relanceResult, setRelanceResult] = useState<{
+    newlyMarkedOverdue: number;
+    totalOverdue: number;
+  } | null>(null);
 
   const fetchCotisations = useCallback(async () => {
     setLoading(true);
@@ -125,6 +130,28 @@ export default function CotisationsPage() {
     }
   }
 
+  async function handleRelance() {
+    setRelancing(true);
+    setError("");
+    setRelanceResult(null);
+    try {
+      const res = await fetch("/api/cotisations/relance", {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Erreur lors de la relance");
+      }
+      const json = await res.json();
+      setRelanceResult(json.data);
+      await fetchCotisations();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur inconnue");
+    } finally {
+      setRelancing(false);
+    }
+  }
+
   const totalAttendu = cotisations.reduce((sum, c) => sum + c.amount, 0);
   const totalEncaisse = cotisations
     .filter((c) => c.status === "PAID")
@@ -167,10 +194,29 @@ export default function CotisationsPage() {
             ))}
           </select>
           {userRole && canManageCotisations(userRole) && (
-            <Button onClick={() => setShowConfirm(true)}>
-              <Zap className="mr-2 h-4 w-4" />
-              Générer les appels
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                onClick={handleRelance}
+                disabled={relancing}
+              >
+                {relancing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Relance...
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="mr-2 h-4 w-4" />
+                    Relancer les impayés
+                  </>
+                )}
+              </Button>
+              <Button onClick={() => setShowConfirm(true)}>
+                <Zap className="mr-2 h-4 w-4" />
+                Générer les appels
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -211,6 +257,14 @@ export default function CotisationsPage() {
             </Button>
           </CardContent>
         </Card>
+      )}
+
+      {relanceResult && (
+        <div className="rounded-md bg-blue-50 p-4 text-sm text-blue-800">
+          Relance effectuée : {relanceResult.newlyMarkedOverdue} cotisation(s)
+          nouvellement marquée(s) en retard. Total en retard :{" "}
+          {relanceResult.totalOverdue}.
+        </div>
       )}
 
       {error && (

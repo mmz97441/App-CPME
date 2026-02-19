@@ -25,6 +25,11 @@ export async function GET(req: NextRequest) {
 
     const where: Prisma.TicketWhereInput = {};
 
+    // ADHERENT can only see their own tickets
+    if (session.user.role === "ADHERENT") {
+      where.createdById = session.user.id;
+    }
+
     if (status) {
       where.status = status as Prisma.TicketWhereInput["status"];
     }

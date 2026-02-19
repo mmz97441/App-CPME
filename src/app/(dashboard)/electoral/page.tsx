@@ -28,11 +28,20 @@ const COTISATION_STATUS_LABELS: Record<string, string> = {
   PENDING: "En attente",
   OVERDUE: "En retard",
   SUSPENDED: "Suspendue",
+  AUCUNE: "Aucune",
+};
+
+const SECTEUR_LABELS: Record<string, string> = {
+  COMMERCE: "Commerce",
+  INDUSTRIE: "Industrie",
+  SERVICES: "Services",
+  BTP: "BTP",
 };
 
 export default function ElectoralPage() {
   const [entries, setEntries] = useState<ElectoralEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<FilterMode>("all");
 
@@ -52,6 +61,102 @@ export default function ElectoralPage() {
     }
     fetchElectoral();
   }, []);
+
+  async function handleExportPDF() {
+    setExporting(true);
+    try {
+      const { default: jsPDF } = await import("jspdf");
+      const { default: autoTable } = await import("jspdf-autotable");
+
+      const doc = new jsPDF({ orientation: "landscape" });
+      const now = new Date();
+      const currentYear = now.getFullYear();
+
+      // Header
+      doc.setFontSize(18);
+      doc.text("CPME Réunion - Liste Électorale", 14, 20);
+      doc.setFontSize(11);
+      doc.text(
+        `Année ${currentYear} - Générée le ${now.toLocaleDateString("fr-FR")} à ${now.toLocaleTimeString("fr-FR")}`,
+        14,
+        28
+      );
+
+      const eligible = entries.filter((e) => e.canVote);
+      const ineligible = entries.filter((e) => !e.canVote);
+
+      doc.setFontSize(10);
+      doc.text(
+        `Total: ${entries.length} | Éligibles: ${eligible.length} | Non éligibles: ${ineligible.length}`,
+        14,
+        35
+      );
+
+      // Table data
+      const tableData = entries.map((entry) => [
+        entry.companyName,
+        entry.userName || "-",
+        entry.email,
+        SECTEUR_LABELS[entry.secteur] || entry.secteur,
+        entry.type,
+        COTISATION_STATUS_LABELS[entry.cotisationStatus] || entry.cotisationStatus,
+        entry.canVote ? "OUI" : "NON",
+      ]);
+
+      autoTable(doc, {
+        startY: 40,
+        head: [
+          [
+            "Entreprise",
+            "Représentant",
+            "Email",
+            "Secteur",
+            "Type",
+            "Cotisation",
+            "Droit de vote",
+          ],
+        ],
+        body: tableData,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [30, 41, 59] },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: {
+          6: {
+            fontStyle: "bold",
+            halign: "center",
+          },
+        },
+        didParseCell: function (data) {
+          if (data.section === "body" && data.column.index === 6) {
+            if (data.cell.raw === "OUI") {
+              data.cell.styles.textColor = [22, 163, 74];
+            } else {
+              data.cell.styles.textColor = [220, 38, 38];
+            }
+          }
+        },
+      });
+
+      // Footer on all pages
+      const pageCount = doc.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.text(
+          `CPME Réunion - Liste électorale ${currentYear} - Page ${i}/${pageCount}`,
+          14,
+          doc.internal.pageSize.height - 10
+        );
+      }
+
+      doc.save(`liste-electorale-cpme-${currentYear}.pdf`);
+    } catch (err) {
+      setError("Erreur lors de la génération du PDF");
+      console.error(err);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const eligible = entries.filter((e) => e.canVote);
   const ineligible = entries.filter((e) => !e.canVote);
@@ -93,10 +198,20 @@ export default function ElectoralPage() {
         </div>
         <Button
           variant="outline"
-          onClick={() => alert("Export PDF à venir")}
+          onClick={handleExportPDF}
+          disabled={exporting}
         >
-          <Download className="mr-2 h-4 w-4" />
-          Exporter
+          {exporting ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Génération...
+            </>
+          ) : (
+            <>
+              <Download className="mr-2 h-4 w-4" />
+              Exporter PDF
+            </>
+          )}
         </Button>
       </div>
 
@@ -147,7 +262,7 @@ export default function ElectoralPage() {
 
       {/* Filter bar */}
       <Card>
-        <CardContent className="flex items-center gap-3 pt-6">
+        <CardContent className="flex flex-wrap items-center gap-3 pt-6">
           <Filter className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm text-muted-foreground">Filtre :</span>
           <Button
@@ -197,10 +312,10 @@ export default function ElectoralPage() {
                   <tr className="border-b text-left text-muted-foreground">
                     <th className="pb-3 pr-4 font-medium">Entreprise</th>
                     <th className="pb-3 pr-4 font-medium">Représentant</th>
-                    <th className="pb-3 pr-4 font-medium">Email</th>
-                    <th className="pb-3 pr-4 font-medium">Secteur</th>
-                    <th className="pb-3 pr-4 font-medium">Type</th>
-                    <th className="pb-3 pr-4 font-medium">Membre depuis</th>
+                    <th className="hidden pb-3 pr-4 font-medium md:table-cell">Email</th>
+                    <th className="hidden pb-3 pr-4 font-medium lg:table-cell">Secteur</th>
+                    <th className="hidden pb-3 pr-4 font-medium lg:table-cell">Type</th>
+                    <th className="hidden pb-3 pr-4 font-medium md:table-cell">Membre depuis</th>
                     <th className="pb-3 pr-4 font-medium">Cotisation</th>
                     <th className="pb-3 font-medium">Droit de vote</th>
                   </tr>
@@ -215,14 +330,16 @@ export default function ElectoralPage() {
                         {entry.companyName}
                       </td>
                       <td className="py-3 pr-4">{entry.userName}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">
+                      <td className="hidden py-3 pr-4 text-muted-foreground md:table-cell">
                         {entry.email}
                       </td>
-                      <td className="py-3 pr-4">
-                        <Badge variant="outline">{entry.secteur}</Badge>
+                      <td className="hidden py-3 pr-4 lg:table-cell">
+                        <Badge variant="outline">
+                          {SECTEUR_LABELS[entry.secteur] || entry.secteur}
+                        </Badge>
                       </td>
-                      <td className="py-3 pr-4">{entry.type}</td>
-                      <td className="py-3 pr-4">
+                      <td className="hidden py-3 pr-4 lg:table-cell">{entry.type}</td>
+                      <td className="hidden py-3 pr-4 md:table-cell">
                         {formatDate(entry.memberSince)}
                       </td>
                       <td className="py-3 pr-4">
