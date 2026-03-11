@@ -34,7 +34,7 @@ export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   session: {
     strategy: "jwt",
-    maxAge: 24 * 60 * 60, // 24 hours
+    maxAge: 24 * 60 * 60,
   },
   pages: {
     signIn: "/login",
@@ -56,7 +56,7 @@ export const authOptions: NextAuthOptions = {
           where: { email: credentials.email },
         });
 
-        if (!user) {
+        if (!user || !user.isActive) {
           throw new Error("Identifiants invalides");
         }
 

@@ -4,142 +4,142 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  // Create admin user
-  const adminPassword = await bcrypt.hash("Admin123!", 12);
-  const admin = await prisma.user.upsert({
-    where: { email: "admin@observatoire-pme.fr" },
+  console.log("Seeding CPME-OS database...");
+
+  const adminHash = await bcrypt.hash("Admin123!", 12);
+  await prisma.user.upsert({
+    where: { email: "admin@cpme.re" },
     update: {},
     create: {
-      email: "admin@observatoire-pme.fr",
-      name: "Administrateur",
-      passwordHash: adminPassword,
+      email: "admin@cpme.re",
+      name: "Administrateur Système",
+      passwordHash: adminHash,
       role: "ADMIN",
+      isActive: true,
       gdprConsent: true,
       gdprConsentAt: new Date(),
     },
   });
 
-  // Create demo entrepreneur
-  const demoPassword = await bcrypt.hash("Demo1234!", 12);
-  const entrepreneur = await prisma.user.upsert({
-    where: { email: "demo@entreprise.fr" },
+  const presidentHash = await bcrypt.hash("President123!", 12);
+  await prisma.user.upsert({
+    where: { email: "president@cpme.re" },
     update: {},
     create: {
-      email: "demo@entreprise.fr",
+      email: "president@cpme.re",
+      name: "Président CPME",
+      passwordHash: presidentHash,
+      role: "PRESIDENT",
+      isActive: true,
+      gdprConsent: true,
+      gdprConsentAt: new Date(),
+    },
+  });
+
+  const dgHash = await bcrypt.hash("Delegue123!", 12);
+  await prisma.user.upsert({
+    where: { email: "dg@cpme.re" },
+    update: {},
+    create: {
+      email: "dg@cpme.re",
+      name: "Jean-Philippe Payet",
+      passwordHash: dgHash,
+      role: "DELEGUE_GENERAL",
+      isActive: true,
+      gdprConsent: true,
+      gdprConsentAt: new Date(),
+    },
+  });
+
+  const tresorierHash = await bcrypt.hash("Tresorier123!", 12);
+  await prisma.user.upsert({
+    where: { email: "tresorier@cpme.re" },
+    update: {},
+    create: {
+      email: "tresorier@cpme.re",
+      name: "Gianni Turpin",
+      passwordHash: tresorierHash,
+      role: "TRESORIER",
+      isActive: true,
+      gdprConsent: true,
+      gdprConsentAt: new Date(),
+    },
+  });
+
+  const adherentHash = await bcrypt.hash("Adherent123!", 12);
+  const adherentUser = await prisma.user.upsert({
+    where: { email: "demo@entreprise.re" },
+    update: {},
+    create: {
+      email: "demo@entreprise.re",
       name: "Marie Dupont",
-      passwordHash: demoPassword,
-      role: "ENTREPRENEUR",
+      passwordHash: adherentHash,
+      role: "ADHERENT",
+      isActive: true,
       gdprConsent: true,
       gdprConsentAt: new Date(),
     },
   });
 
-  // Create demo company
-  const company = await prisma.company.upsert({
-    where: { userId: entrepreneur.id },
+  await prisma.adherent.upsert({
+    where: { userId: adherentUser.id },
     update: {},
     create: {
-      userId: entrepreneur.id,
-      name: "Dupont & Fils SARL",
-      sector: "Commerce",
-      effectif: 12,
-      caAnnuel: 800000,
-      statutJuridique: "SARL",
-      region: "Île-de-France",
+      userId: adherentUser.id,
+      type: "DIRECT",
+      companyName: "Dupont Services SARL",
+      siret: "12345678901234",
+      secteur: "SERVICES",
+      effectif: 15,
+      caAnnuel: 500000,
+      isVIP: false,
+      memberSince: new Date("2020-01-15"),
+      phone: "0262 00 00 00",
+      address: "10 rue des Palmiers",
+      city: "Saint-Denis",
+      postalCode: "97400",
     },
   });
 
-  // Create sample diagnostic
-  await prisma.diagnostic.create({
-    data: {
-      userId: entrepreneur.id,
-      companyId: company.id,
-      rawAnswers: {
-        effectif: 12,
-        secteur: "Commerce",
-        caAnnuel: 800000,
-        statutJuridique: "SARL",
-        region: "Île-de-France",
-        nombreDeclarations: 15,
-        tempsMensuelFiscal: 25,
-        coutConformite: 18000,
-        nombreProceduresRH: 8,
-        nombreInterlocuteurs: 6,
-        scoreDifficultePercue: 7,
-        tempsAdminHebdo: 20,
-        nombrePlateformes: 6,
-        doubleSaisie: true,
-      },
-      complexityScore: 52.3,
-      fiscalScore: 48.7,
-      socialScore: 55.2,
-      adminScore: 58.1,
-    },
-  });
-
-  // Create sample signalements
-  const signalements = [
-    {
-      title: "Déclaration TVA mensuelle trop fréquente",
-      description:
-        "La déclaration TVA mensuelle mobilise 2 jours par mois pour une PME de 12 salariés. Un passage au trimestriel serait plus adapté pour les petites structures.",
-      estimatedTimeLoss: 48,
-      estimatedCost: 8000,
-      level: "NATIONAL" as const,
-      sector: "Commerce",
-      severityScore: 35.2,
-    },
-    {
-      title: "Multiplication des plateformes administratives",
-      description:
-        "Nous devons jongler entre impots.gouv, net-entreprises, URSSAF, MSA et 3 autres portails différents. Aucune interopérabilité, informations à ressaisir systématiquement.",
-      estimatedTimeLoss: 120,
-      estimatedCost: 15000,
-      level: "NATIONAL" as const,
-      sector: "Tous secteurs",
-      severityScore: 52.8,
-    },
-    {
-      title: "Normes accessibilité disproportionnées pour petits commerces",
-      description:
-        "Les normes d'accessibilité ERP sont identiques pour un commerce de 30m² et un hypermarché. Le coût de mise en conformité est démesuré pour les petites structures.",
-      estimatedTimeLoss: 40,
-      estimatedCost: 25000,
-      level: "LOCAL" as const,
-      sector: "Commerce",
-      severityScore: 41.5,
-    },
+  const baremes = [
+    { label: "Auto-entrepreneur (0 salarié)", effectifMin: 0, effectifMax: 0, amount: 150 },
+    { label: "TPE (1-5 salariés)", effectifMin: 1, effectifMax: 5, amount: 250 },
+    { label: "TPE (6-10 salariés)", effectifMin: 6, effectifMax: 10, amount: 500 },
+    { label: "PME (11-50 salariés)", effectifMin: 11, effectifMax: 50, amount: 1000 },
+    { label: "PME (51-200 salariés)", effectifMin: 51, effectifMax: 200, amount: 2000 },
+    { label: "ETI (201-500 salariés)", effectifMin: 201, effectifMax: 500, amount: 3500 },
+    { label: "ETI/GE (500+ salariés)", effectifMin: 501, effectifMax: 999999, amount: 5000 },
   ];
 
-  for (const s of signalements) {
-    await prisma.signalement.create({
-      data: {
-        userId: entrepreneur.id,
-        ...s,
-      },
-    });
+  for (const bareme of baremes) {
+    await prisma.cotisationBareme.create({ data: bareme });
   }
 
-  // Create analyste user
-  await prisma.user.upsert({
-    where: { email: "analyste@observatoire-pme.fr" },
+  await prisma.instance.upsert({
+    where: { name: "Bureau" },
     update: {},
-    create: {
-      email: "analyste@observatoire-pme.fr",
-      name: "Pierre Martin",
-      passwordHash: await bcrypt.hash("Analyste1!", 12),
-      role: "ANALYSTE",
-      gdprConsent: true,
-      gdprConsentAt: new Date(),
-    },
+    create: { name: "Bureau", description: "Bureau de la CPME Réunion" },
   });
 
-  console.log("Seed data created successfully");
-  console.log("Admin: admin@observatoire-pme.fr / Admin123!");
-  console.log("Entrepreneur: demo@entreprise.fr / Demo1234!");
-  console.log("Analyste: analyste@observatoire-pme.fr / Analyste1!");
+  await prisma.instance.upsert({
+    where: { name: "Conseil d'Administration" },
+    update: {},
+    create: { name: "Conseil d'Administration", description: "Conseil d'Administration de la CPME Réunion" },
+  });
+
+  console.log("Seed completed!");
+  console.log("  Admin:     admin@cpme.re / Admin123!");
+  console.log("  Président: president@cpme.re / President123!");
+  console.log("  DG:        dg@cpme.re / Delegue123!");
+  console.log("  Trésorier: tresorier@cpme.re / Tresorier123!");
+  console.log("  Adhérent:  demo@entreprise.re / Adherent123!");
 }
 
 main()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect());
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

@@ -8,40 +8,135 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+// =============================================================================
+// ENUMS
+// =============================================================================
+
 enum Role {
-  ENTREPRENEUR
   ADMIN
-  ANALYSTE
-  MODERATEUR
-  INSTITUTION
-  DATA_VIEW_ONLY
+  PRESIDENT
+  DELEGUE_GENERAL
+  TRESORIER
+  MEMBRE_BUREAU
+  MEMBRE_CA
+  ADHERENT
 }
 
-enum SignalementLevel {
-  LOCAL
-  NATIONAL
-  EU
+enum AdherentType {
+  DIRECT
+  FEDERATION
+  SYNDICAT
 }
+
+enum Secteur {
+  COMMERCE
+  INDUSTRIE
+  SERVICES
+  BTP
+}
+
+enum CotisationStatus {
+  PENDING
+  PAID
+  OVERDUE
+  SUSPENDED
+}
+
+enum MandatClassification {
+  STRATEGIQUE
+  TECHNIQUE
+}
+
+enum MandatAssignmentStatus {
+  ACTIVE
+  TERMINE
+  SUSPENDU
+}
+
+enum CandidatureStatus {
+  EN_ATTENTE
+  ACCEPTEE
+  REFUSEE
+}
+
+enum TicketCategory {
+  JURIDIQUE
+  PRESSE
+  COTISATION
+  AUTRE
+}
+
+enum TicketStatus {
+  OUVERT
+  EN_COURS
+  RESOLU
+  FERME
+}
+
+enum PresenceType {
+  PRESENTIEL
+  VISIO
+}
+
+enum VoteSessionStatus {
+  EN_COURS
+  TERMINEE
+  ANNULEE
+}
+
+enum MatchingFundStatus {
+  EN_ATTENTE
+  VALIDE
+  REFUSE
+}
+
+enum FormationStatus {
+  DISPONIBLE
+  EN_COURS
+  TERMINEE
+  ANNULEE
+}
+
+enum AppelOffreStatus {
+  OUVERT
+  FERME
+  ATTRIBUE
+}
+
+enum SuiviFormationStatus {
+  INSCRIT
+  EN_COURS
+  TERMINE
+  ABANDONNE
+}
+
+// =============================================================================
+// AUTH & USER
+// =============================================================================
 
 model User {
-  id             String    @id @default(cuid())
-  email          String    @unique
-  name           String?
-  passwordHash   String
-  role           Role      @default(ENTREPRENEUR)
-  gdprConsent    Boolean   @default(false)
-  gdprConsentAt  DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String
+  role          Role      @default(ADHERENT)
+  isActive      Boolean   @default(true)
+  gdprConsent   Boolean   @default(false)
+  gdprConsentAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  company            Company?
-  diagnostics        Diagnostic[]
-  signalements       Signalement[]
-  healthAssessments  HealthAssessment[]
-  votes              Vote[]
-  auditLogs          AuditLog[]
-  accounts           Account[]
-  sessions           Session[]
+  adherent              Adherent?
+  accounts              Account[]
+  sessions              Session[]
+  auditLogs             AuditLog[]
+  convocationsCreated   Convocation[]
+  emargements           Emargement[]
+  engagementDeclaration EngagementDeclaration?
+  ticketsCreated        Ticket[]                @relation("TicketCreator")
+  ticketsAssigned       Ticket[]                @relation("TicketAssignee")
+  ticketMessages        TicketMessage[]
+  matchingValidations   MatchingFundAbondement[] @relation("MatchingValidator")
 
   @@index([email])
   @@index([role])
@@ -75,98 +170,381 @@ model Session {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model Company {
-  id            String   @id @default(cuid())
-  userId        String   @unique
-  name          String
-  sector        String
-  effectif      Int
-  caAnnuel      Float
-  statutJuridique String
-  region        String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+// =============================================================================
+// MODULE 1 : CRM ADHÉRENTS & COTISATIONS
+// =============================================================================
 
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  diagnostics Diagnostic[]
+model Adherent {
+  id          String       @id @default(cuid())
+  userId      String       @unique
+  type        AdherentType @default(DIRECT)
+  siret       String?      @unique
+  companyName String
+  secteur     Secteur
+  effectif    Int
+  caAnnuel    Float?
+  isVIP       Boolean      @default(false)
+  memberSince DateTime     @default(now())
+  isActive    Boolean      @default(true)
+  notes       String?      @db.Text
+  phone       String?
+  address     String?
+  city        String?
+  postalCode  String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
-  @@index([sector])
-  @@index([region])
-  @@index([effectif])
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cotisations         Cotisation[]
+  mandatAssignments   MandatAssignment[]
+  mandatCandidatures  MandatCandidature[]
+  mandatReports       MandatReport[]
+  tickets             Ticket[]
+  appelOffreResponses AppelOffreResponse[]
+  suiviFormations     SuiviFormation[]
+
+  @@index([secteur])
+  @@index([type])
+  @@index([isVIP])
+  @@index([isActive])
 }
 
-model Diagnostic {
-  id              String   @id @default(cuid())
-  userId          String
-  companyId       String
-  rawAnswers      Json
-  complexityScore Float
-  fiscalScore     Float
-  socialScore     Float
-  adminScore      Float
-  createdAt       DateTime @default(now())
+model Cotisation {
+  id         String           @id @default(cuid())
+  adherentId String
+  year       Int
+  amount     Float
+  status     CotisationStatus @default(PENDING)
+  dueDate    DateTime
+  paidAt     DateTime?
+  invoiceRef String?
+  notes      String?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
 
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  adherent Adherent @relation(fields: [adherentId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
-  @@index([companyId])
-  @@index([createdAt])
+  @@unique([adherentId, year])
+  @@index([status])
+  @@index([year])
+  @@index([dueDate])
 }
 
-model Signalement {
-  id                String           @id @default(cuid())
-  userId            String
-  title             String
-  description       String           @db.Text
-  estimatedTimeLoss Float
-  estimatedCost     Float
-  level             SignalementLevel
-  sector            String
-  severityScore     Float            @default(0)
-  votesCount        Int              @default(0)
-  aiCategory        String?
-  aiSummary         String?          @db.Text
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+model CotisationBareme {
+  id          String   @id @default(cuid())
+  label       String
+  effectifMin Int
+  effectifMax Int
+  amount      Float
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  votes Vote[]
+  @@index([isActive])
+}
 
-  @@index([userId])
-  @@index([sector])
-  @@index([level])
-  @@index([severityScore])
-  @@index([createdAt])
+// =============================================================================
+// MODULE 2 : GOUVERNANCE & DÉMOCRATIE
+// =============================================================================
+
+model Instance {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  convocations Convocation[]
+  voteSessions VoteSession[]
+}
+
+model Convocation {
+  id          String    @id @default(cuid())
+  instanceId  String
+  createdById String
+  date        DateTime
+  subject     String
+  description String?   @db.Text
+  location    String?
+  isOnline    Boolean   @default(false)
+  onlineLink  String?
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  instance     Instance      @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  createdBy    User          @relation(fields: [createdById], references: [id])
+  emargements  Emargement[]
+  voteSessions VoteSession[]
+
+  @@index([instanceId])
+  @@index([date])
+}
+
+model Emargement {
+  id            String       @id @default(cuid())
+  convocationId String
+  userId        String
+  presenceType  PresenceType
+  signedAt      DateTime     @default(now())
+
+  convocation Convocation @relation(fields: [convocationId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([convocationId, userId])
+}
+
+model VoteSession {
+  id            String            @id @default(cuid())
+  instanceId    String
+  convocationId String?
+  subject       String
+  description   String?           @db.Text
+  options       Json
+  isAnonymous   Boolean           @default(true)
+  status        VoteSessionStatus @default(EN_COURS)
+  closedAt      DateTime?
+  createdAt     DateTime          @default(now())
+
+  instance    Instance     @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  convocation Convocation? @relation(fields: [convocationId], references: [id])
+  votes       Vote[]
+
+  @@index([instanceId])
+  @@index([status])
 }
 
 model Vote {
   id            String   @id @default(cuid())
-  userId        String
-  signalementId String
+  voteSessionId String
+  encryptedVote String
+  voterHash     String
   createdAt     DateTime @default(now())
 
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  signalement Signalement @relation(fields: [signalementId], references: [id], onDelete: Cascade)
+  voteSession VoteSession @relation(fields: [voteSessionId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, signalementId])
+  @@index([voteSessionId])
 }
 
-model HealthAssessment {
-  id                    String   @id @default(cuid())
-  userId                String
-  fatigueMentale        Int
-  chargeEmotionnelle    Int
-  isolement             Int
-  difficulteDecisionnelle Int
-  score                 Float
-  createdAt             DateTime @default(now())
+model EngagementDeclaration {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  tempsAlloue Float
+  axesPactes  Json
+  commentaire String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
 
-  @@index([userId])
+// =============================================================================
+// MODULE 3 : MANDATS
+// =============================================================================
+
+model Mandat {
+  id             String               @id @default(cuid())
+  name           String
+  organisme      String
+  classification MandatClassification
+  description    String?              @db.Text
+  feuilleDeRoute String?              @db.Text
+  isActive       Boolean              @default(true)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  assignments  MandatAssignment[]
+  candidatures MandatCandidature[]
+
+  @@index([organisme])
+  @@index([classification])
+  @@index([isActive])
+}
+
+model MandatAssignment {
+  id         String                 @id @default(cuid())
+  mandatId   String
+  adherentId String
+  startDate  DateTime
+  endDate    DateTime?
+  status     MandatAssignmentStatus @default(ACTIVE)
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
+
+  mandat   Mandat         @relation(fields: [mandatId], references: [id], onDelete: Cascade)
+  adherent Adherent       @relation(fields: [adherentId], references: [id], onDelete: Cascade)
+  reports  MandatReport[]
+
+  @@index([mandatId])
+  @@index([adherentId])
+  @@index([status])
+}
+
+model MandatCandidature {
+  id         String            @id @default(cuid())
+  mandatId   String
+  adherentId String
+  motivation String?           @db.Text
+  status     CandidatureStatus @default(EN_ATTENTE)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  mandat   Mandat   @relation(fields: [mandatId], references: [id], onDelete: Cascade)
+  adherent Adherent @relation(fields: [adherentId], references: [id], onDelete: Cascade)
+
+  @@unique([mandatId, adherentId])
+}
+
+model MandatReport {
+  id                 String   @id @default(cuid())
+  mandatAssignmentId String
+  adherentId         String
+  decisionsClefs     String   @db.Text
+  pointsAlerte       String?  @db.Text
+  voteEmis           String?
+  attachments        Json?
+  createdAt          DateTime @default(now())
+
+  mandatAssignment MandatAssignment @relation(fields: [mandatAssignmentId], references: [id], onDelete: Cascade)
+  adherent         Adherent         @relation(fields: [adherentId], references: [id], onDelete: Cascade)
+
+  @@index([mandatAssignmentId])
   @@index([createdAt])
 }
+
+// =============================================================================
+// MODULE 4 : INNOVATIONS (MATCHING FUND & FORMATIONS)
+// =============================================================================
+
+model MatchingFundDon {
+  id         String   @id @default(cuid())
+  meceneName String
+  amount     Float
+  date       DateTime
+  reference  String?
+  createdAt  DateTime @default(now())
+
+  abondements MatchingFundAbondement[]
+}
+
+model MatchingFundAbondement {
+  id                String             @id @default(cuid())
+  donId             String
+  actionDescription String
+  amount            Float
+  animateurName     String
+  validatedById     String?
+  status            MatchingFundStatus @default(EN_ATTENTE)
+  validatedAt       DateTime?
+  createdAt         DateTime           @default(now())
+
+  don         MatchingFundDon @relation(fields: [donId], references: [id], onDelete: Cascade)
+  validatedBy User?           @relation("MatchingValidator", fields: [validatedById], references: [id])
+
+  @@index([status])
+}
+
+model Formation {
+  id          String          @id @default(cuid())
+  title       String
+  description String?         @db.Text
+  category    String
+  duration    String?
+  status      FormationStatus @default(DISPONIBLE)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  appelsOffre     AppelOffre[]
+  suiviFormations SuiviFormation[]
+}
+
+model AppelOffre {
+  id          String           @id @default(cuid())
+  formationId String
+  description String           @db.Text
+  deadline    DateTime
+  status      AppelOffreStatus @default(OUVERT)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  formation Formation            @relation(fields: [formationId], references: [id], onDelete: Cascade)
+  responses AppelOffreResponse[]
+
+  @@index([status])
+  @@index([deadline])
+}
+
+model AppelOffreResponse {
+  id           String   @id @default(cuid())
+  appelOffreId String
+  adherentId   String
+  proposal     String   @db.Text
+  amount       Float?
+  createdAt    DateTime @default(now())
+
+  appelOffre AppelOffre @relation(fields: [appelOffreId], references: [id], onDelete: Cascade)
+  adherent   Adherent   @relation(fields: [adherentId], references: [id], onDelete: Cascade)
+
+  @@unique([appelOffreId, adherentId])
+}
+
+model SuiviFormation {
+  id          String               @id @default(cuid())
+  formationId String
+  adherentId  String
+  status      SuiviFormationStatus @default(INSCRIT)
+  completedAt DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  formation Formation @relation(fields: [formationId], references: [id], onDelete: Cascade)
+  adherent  Adherent  @relation(fields: [adherentId], references: [id], onDelete: Cascade)
+
+  @@unique([formationId, adherentId])
+}
+
+// =============================================================================
+// MODULE 5 : COMMUNICATION (TICKETING)
+// =============================================================================
+
+model Ticket {
+  id           String         @id @default(cuid())
+  adherentId   String?
+  createdById  String
+  assignedToId String?
+  category     TicketCategory
+  subject      String
+  status       TicketStatus   @default(OUVERT)
+  priority     Int            @default(0)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  adherent   Adherent?       @relation(fields: [adherentId], references: [id])
+  createdBy  User            @relation("TicketCreator", fields: [createdById], references: [id])
+  assignedTo User?           @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  messages   TicketMessage[]
+
+  @@index([category])
+  @@index([status])
+  @@index([adherentId])
+  @@index([assignedToId])
+}
+
+model TicketMessage {
+  id        String   @id @default(cuid())
+  ticketId  String
+  authorId  String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User   @relation(fields: [authorId], references: [id])
+
+  @@index([ticketId])
+}
+
+// =============================================================================
+// AUDIT
+// =============================================================================
 
 model AuditLog {
   id        String   @id @default(cuid())

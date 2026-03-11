@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 
 export default withAuth(
   function middleware(req) {
-    // Add security headers
     const response = NextResponse.next();
 
     response.headers.set("X-Content-Type-Options", "nosniff");
@@ -23,17 +22,18 @@ export default withAuth(
 export const config = {
   matcher: [
     "/dashboard/:path*",
-    "/diagnostic/:path*",
-    "/signalements/:path*",
-    "/observatory/:path*",
-    "/health/:path*",
+    "/adherents/:path*",
+    "/cotisations/:path*",
+    "/electoral/:path*",
+    "/gouvernance/:path*",
+    "/mandats/:path*",
+    "/tickets/:path*",
     "/admin/:path*",
-    "/api/diagnostics/:path*",
-    "/api/signalements/:path*",
-    "/api/health-assessments/:path*",
-    "/api/observatory/:path*",
-    "/api/users/:path*",
-    "/api/export/:path*",
-    "/api/ai/:path*",
+    "/profile/:path*",
+    "/api/adherents/:path*",
+    "/api/cotisations/:path*",
+    "/api/electoral/:path*",
+    "/api/admin/:path*",
+    "/api/dashboard/:path*",
   ],
 };

@@ -38,28 +38,31 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError("Identifiants invalides");
+        setError("Identifiants invalides. Veuillez r\u00e9essayer.");
       } else {
         router.push("/dashboard");
         router.refresh();
       }
     } catch {
-      setError("Une erreur est survenue");
+      setError("Une erreur est survenue. Veuillez r\u00e9essayer plus tard.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-primary/5 to-background px-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-slate-900 to-slate-800 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary">
-            <span className="text-lg font-bold text-primary-foreground">O</span>
+          <div className="mx-auto mb-4 flex items-center gap-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500 text-lg font-bold text-white">
+              C
+            </div>
+            <span className="text-xl font-bold text-foreground">CPME-OS</span>
           </div>
           <CardTitle>Connexion</CardTitle>
           <CardDescription>
-            Accédez à votre espace Observatoire PME
+            Acc&eacute;dez &agrave; votre espace de gestion CPME
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
@@ -70,13 +73,14 @@ export default function LoginPage() {
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Adresse e-mail</Label>
               <Input
                 id="email"
                 name="email"
                 type="email"
-                placeholder="vous@entreprise.fr"
+                placeholder="vous@cpme.fr"
                 required
+                autoComplete="email"
               />
             </div>
             <div className="space-y-2">
@@ -87,17 +91,18 @@ export default function LoginPage() {
                 type="password"
                 placeholder="Votre mot de passe"
                 required
+                autoComplete="current-password"
               />
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Connexion..." : "Se connecter"}
+              {loading ? "Connexion en cours..." : "Se connecter"}
             </Button>
             <p className="text-center text-sm text-muted-foreground">
               Pas encore de compte ?{" "}
               <Link href="/register" className="text-primary hover:underline">
-                Créer un compte
+                Contactez l&apos;administrateur
               </Link>
             </p>
           </CardFooter>
